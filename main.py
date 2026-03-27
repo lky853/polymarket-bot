@@ -83,15 +83,20 @@ def get_price(token_id):
     try:
         book = client.get_order_book(token_id)
 
-        if not book["asks"]:
-            return None
+        # 優先用 ask（買價）
+        if book["asks"]:
+            return float(book["asks"][0]["price"])
 
-        return float(book["asks"][0]["price"])
+        # 🔥 fallback 用 bid（賣價）
+        if book["bids"]:
+            return float(book["bids"][0]["price"])
+
+        return None
 
     except Exception as e:
         logger.debug(f"price error: {e}")
         return None
-
+        
 # =========================
 # MAIN
 # =========================
