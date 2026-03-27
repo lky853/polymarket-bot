@@ -74,12 +74,21 @@ def main():
                 try:
                     tokens = m.get("clobTokenIds", [])
 
-                    logger.info(f"TOKENS RAW: {tokens}")
+logger.info(f"TOKENS RAW: {tokens}")
 
-                    if not tokens or len(tokens) != 2:
-                        continue
+# 只要 YES/NO
+if not tokens or len(tokens) != 2:
+    continue
 
-                    yes_token, no_token = tokens
+# 🔥 只抓 active
+if not m.get("active"):
+    continue
+
+# 🔥 流動性過濾
+if float(m.get("volume", 0)) < 5000:
+    continue
+
+yes_token, no_token = tokens
 
                     logger.info(f"DEBUG tokens: {yes_token} / {no_token}")
 
