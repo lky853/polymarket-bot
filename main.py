@@ -82,22 +82,37 @@ def fetch_markets():
 # =========================
 # FIND ARBITRAGE
 # =========================
+def get_price(outcome):
+    # 優先順序
+    for key in ["price", "bestAsk", "bestBid", "lastTradePrice"]:
+        if outcome.get(key) is not None:
+            try:
+                return float(outcome[key])
+            except:
+                continue
+    return None
+
+
 def find_arbitrage(markets):
     opportunities = []
 
     for m in markets:
         try:
-            if not m.get("outcomes") or len(m["outcomes"]) != 2:
+            outcomes = m.get("outcomes")
+            if not outcomes or len(outcomes) != 2:
                 continue
 
             volume = float(m.get("volume", 0))
-            if volume < 10000:   # 降低門檻
+            if volume < 5000:
                 continue
 
-            yes_price = float(m["outcomes"][0]["price"])
-            no_price = float(m["outcomes"][1]["price"])
+            yes_price = get_price(outcomes[0])
+            no_price = get_price(outcomes[1])
 
-            # 🔥 測試模式（幾乎一定觸發）
+            if yes_price is None or no_price is None:
+                continue
+
+            # 🔥 測試模式（一定會出）
             if yes_price < 0.6:
                 opportunities.append({
                     "type": "BUY YES",
@@ -115,7 +130,7 @@ def find_arbitrage(markets):
                 })
 
         except Exception as e:
-            logger.debug(e)
+            logger.debug(f"parse error: {e}")
 
     return opportunities
 
