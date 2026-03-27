@@ -128,6 +128,8 @@ def main():
 
                     yes_price = get_price(yes_token)
                     no_price = get_price(no_token)
+logger.info(f"DEBUG tokens: {yes_token} / {no_token}")
+logger.info(f"RAW prices: {yes_price} / {no_price}")
 
                     if yes_price is None or no_price is None:
                         continue
