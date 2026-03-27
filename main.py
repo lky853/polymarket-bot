@@ -81,13 +81,17 @@ def fetch_markets():
 # =========================
 def get_price(token_id):
     try:
-        book = client.get_order_book(token_id)
+        url = f"https://clob.polymarket.com/orderbook/{token_id}"
 
-        # 🔥 印整個 orderbook
-        logger.info(f"ORDERBOOK: {book}")
+        res = requests.get(url, timeout=10)
 
-        if not book:
+        if res.status_code != 200:
+            logger.error(f"CLOB HTTP ERROR: {res.status_code}")
             return None
+
+        book = res.json()
+
+        logger.info(f"ORDERBOOK: {book}")
 
         if book.get("asks"):
             return float(book["asks"][0]["price"])
