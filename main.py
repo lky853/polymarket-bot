@@ -10,7 +10,6 @@ from py_clob_client.client import ClobClient
 # =========================
 HOST = "https://clob.polymarket.com"
 CHAIN_ID = 137
-
 SCAN_INTERVAL = 10
 
 PRIVATE_KEY = os.getenv("PRIVATE_KEY")
@@ -27,7 +26,7 @@ logging.basicConfig(
 logger = logging.getLogger()
 
 # =========================
-# TELEGRAM（retry）
+# TELEGRAM
 # =========================
 def send_tg(msg, retries=5):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
@@ -93,10 +92,9 @@ def get_price(token_id):
 # =========================
 # STRATEGY（測試版）
 # =========================
-def check_opportunity(yes_price, no_price):
+def check_signal(yes_price, no_price):
     signals = []
 
-    # 🔥 測試策略（一定會出）
     if yes_price < 0.5:
         signals.append("BUY YES")
 
@@ -126,17 +124,22 @@ def main():
 
                     yes_token, no_token = tokens
 
+                    # 🔥 DEBUG TOKEN
+                    logger.info(f"DEBUG tokens: {yes_token} / {no_token}")
+
                     yes_price = get_price(yes_token)
                     no_price = get_price(no_token)
-logger.info(f"DEBUG tokens: {yes_token} / {no_token}")
-logger.info(f"RAW prices: {yes_price} / {no_price}")
+
+                    # 🔥 DEBUG PRICE
+                    logger.info(f"RAW prices: {yes_price} / {no_price}")
 
                     if yes_price is None or no_price is None:
                         continue
 
+                    # 顯示價格
                     logger.info(f"{yes_price:.3f} / {no_price:.3f}")
 
-                    signals = check_opportunity(yes_price, no_price)
+                    signals = check_signal(yes_price, no_price)
 
                     if signals:
                         key = m.get("slug")
@@ -147,7 +150,7 @@ logger.info(f"RAW prices: {yes_price} / {no_price}")
                         seen.add(key)
 
                         msg = (
-                            f"📈 SIGNAL\n"
+                            f"📈 SIGNAL\n\n"
                             f"{m.get('question')}\n\n"
                             f"YES: {yes_price}\n"
                             f"NO: {no_price}\n"
@@ -158,7 +161,7 @@ logger.info(f"RAW prices: {yes_price} / {no_price}")
                         send_tg(msg)
 
                 except Exception as e:
-                    logger.debug(e)
+                    logger.debug(f"market error: {e}")
 
             time.sleep(SCAN_INTERVAL)
 
