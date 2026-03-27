@@ -56,10 +56,6 @@ def find_opportunities(markets):
 
     for m in markets:
         try:
-            volume = float(m.get("volume", 0))
-            if volume < MIN_VOLUME:
-                continue
-
             tokens = m.get("tokens", [])
             if len(tokens) < 2:
                 continue
@@ -67,8 +63,12 @@ def find_opportunities(markets):
             yes_price = float(tokens[0].get("price", 0))
             no_price = float(tokens[1].get("price", 0))
 
-            # 🔥 測試策略（一定會出）
-            if yes_price < 0.6:
+            # ❗過濾無效價格
+            if yes_price == 0 or no_price == 0:
+                continue
+
+            # 🔥 超寬鬆（一定出）
+            if yes_price < 0.8:
                 opportunities.append({
                     "type": "BUY YES",
                     "question": m.get("question"),
@@ -76,7 +76,7 @@ def find_opportunities(markets):
                     "url": f"https://polymarket.com/event/{m.get('slug')}"
                 })
 
-            if no_price < 0.6:
+            if no_price < 0.8:
                 opportunities.append({
                     "type": "BUY NO",
                     "question": m.get("question"),
