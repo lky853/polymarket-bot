@@ -117,54 +117,52 @@ def main():
             logger.info(f"Scanning {len(markets)} markets")
 
             for m in markets:
-                try:
-                    tokens = m.get("clobTokenIds", [])
+    try:
+        tokens = m.get("clobTokenIds", [])
 
-                    logger.info(f"TOKENS RAW: {tokens}")
+        # 🔥 debug
+        logger.info(f"TOKENS RAW: {tokens}")
 
-                    if not tokens or len(tokens) != 2:
-                    continue
+        if not tokens or len(tokens) != 2:
+            continue
 
-                    yes_token, no_token = tokens
+        yes_token, no_token = tokens
 
-                    # 🔥 DEBUG TOKEN
-                    logger.info(f"DEBUG tokens: {yes_token} / {no_token}")
+        logger.info(f"DEBUG tokens: {yes_token} / {no_token}")
 
-                    yes_price = get_price(yes_token)
-                    no_price = get_price(no_token)
+        yes_price = get_price(yes_token)
+        no_price = get_price(no_token)
 
-                    # 🔥 DEBUG PRICE
-                    logger.info(f"RAW prices: {yes_price} / {no_price}")
+        logger.info(f"RAW prices: {yes_price} / {no_price}")
 
-                    if yes_price is None or no_price is None:
-                        continue
+        if yes_price is None or no_price is None:
+            continue
 
-                    # 顯示價格
-                    logger.info(f"{yes_price:.3f} / {no_price:.3f}")
+        logger.info(f"{yes_price:.3f} / {no_price:.3f}")
 
-                    signals = check_signal(yes_price, no_price)
+        signals = check_signal(yes_price, no_price)
 
-                    if signals:
-                        key = m.get("slug")
+        if signals:
+            key = m.get("slug")
 
-                        if key in seen:
-                            continue
+            if key in seen:
+                continue
 
-                        seen.add(key)
+            seen.add(key)
 
-                        msg = (
-                            f"📈 SIGNAL\n\n"
-                            f"{m.get('question')}\n\n"
-                            f"YES: {yes_price}\n"
-                            f"NO: {no_price}\n"
-                            f"{signals}"
-                        )
+            msg = (
+                f"📈 SIGNAL\n\n"
+                f"{m.get('question')}\n\n"
+                f"YES: {yes_price}\n"
+                f"NO: {no_price}\n"
+                f"{signals}"
+            )
 
-                        logger.info(msg)
-                        send_tg(msg)
+            logger.info(msg)
+            send_tg(msg)
 
-                except Exception as e:
-                    logger.debug(f"market error: {e}")
+    except Exception as e:
+        logger.debug(f"market error: {e}")
 
             time.sleep(SCAN_INTERVAL)
 
