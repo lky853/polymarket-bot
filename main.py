@@ -22,8 +22,8 @@ MIN_VOLUME = 20000
 
 MAX_USDC = 1  # 每次只用 $1（安全）
 
-YES_BUY_THRESHOLD = 0.40
-NO_BUY_THRESHOLD = 0.40
+YES_BUY_THRESHOLD = 0.45
+NO_BUY_THRESHOLD = 0.45
 
 # =========================
 # LOGGING
