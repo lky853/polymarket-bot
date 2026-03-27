@@ -1,29 +1,17 @@
-import os
-import time
-import logging
 import requests
-
-from py_clob_client.client import ClobClient
-from py_clob_client.clob_types import OrderArgs, OrderType
+import time
+import os
+import logging
 
 # =========================
 # CONFIG
 # =========================
-GAMMA_API = "https://gamma-api.polymarket.com/markets"
-HOST = "https://clob.polymarket.com"
-CHAIN_ID = 137
+SCAN_INTERVAL = 10
+MIN_VOLUME = 20000
+ARBITRAGE_THRESHOLD = 0.99  # YES + NO < 1 才算套利
 
-PRIVATE_KEY = os.getenv("PRIVATE_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-
-SCAN_INTERVAL = 5
-MIN_VOLUME = 20000
-
-MAX_USDC = 1  # 每次只用 $1（安全）
-
-YES_BUY_THRESHOLD = 0.48
-NO_BUY_THRESHOLD = 0.48
 
 # =========================
 # LOGGING
@@ -35,153 +23,155 @@ logging.basicConfig(
 logger = logging.getLogger()
 
 # =========================
-# TELEGRAM
+# TELEGRAM（帶 retry）
 # =========================
-def tg(msg):
+def send_telegram(message, retries=5):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        logger.warning("Telegram not configured")
         return
-    try:
-        requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-            json={
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+
+    for i in range(retries):
+        try:
+            res = requests.post(url, json={
                 "chat_id": TELEGRAM_CHAT_ID,
-                "text": msg,
-                "disable_web_page_preview": True
-            },
-            timeout=5
-        )
-    except Exception as e:
-        logger.error(f"TG error: {e}")
+                "text": message
+            }, timeout=10)
+
+            if res.status_code == 200:
+                logger.info("Telegram sent")
+                return
+            else:
+                logger.error(f"Telegram failed: {res.text}")
+
+        except Exception as e:
+            logger.error(f"Telegram error: {e}")
+
+        time.sleep(2)
+
+    logger.error("Telegram failed after retries")
 
 # =========================
-# INIT CLIENT
-# =========================
-client = ClobClient(
-    host=HOST,
-    chain_id=CHAIN_ID,
-    key=PRIVATE_KEY,
-)
-
-client.set_api_creds(client.create_or_derive_api_creds())
-
-# =========================
-# FETCH MARKETS
+# FETCH MARKETS（分頁版🔥）
 # =========================
 def fetch_markets():
+    all_markets = []
+    cursor = None
+
     try:
-        r = requests.get(GAMMA_API, timeout=8)
-        if r.status_code != 200:
-            logger.error(f"API error {r.status_code}")
-            return []
-        return r.json()
+        while True:
+            url = "https://gamma-api.polymarket.com/markets"
+            params = {"limit": 100}
+
+            if cursor:
+                params["cursor"] = cursor
+
+            res = requests.get(url, params=params, timeout=10)
+            data = res.json()
+
+            markets = data.get("markets", [])
+            all_markets.extend(markets)
+
+            cursor = data.get("next_cursor")
+
+            if not cursor:
+                break
+
+        return all_markets
+
     except Exception as e:
         logger.error(f"fetch error: {e}")
         return []
 
 # =========================
-# ORDERBOOK
+# FIND ARBITRAGE
 # =========================
-def get_orderbook(token_id):
-    try:
-        return client.get_order_book(token_id)
-    except Exception as e:
-        logger.warning(f"orderbook error: {e}")
-        return None
+def find_arbitrage(markets):
+    opportunities = []
+
+    for m in markets:
+        try:
+            if not m.get("outcomes") or len(m["outcomes"]) != 2:
+                continue
+
+            volume = float(m.get("volume", 0))
+            if volume < MIN_VOLUME:
+                continue
+
+            yes_price = float(m["outcomes"][0]["price"])
+            no_price = float(m["outcomes"][1]["price"])
+
+            total = yes_price + no_price
+
+            if total < ARBITRAGE_THRESHOLD:
+                opportunities.append({
+                    "question": m.get("question"),
+                    "yes": yes_price,
+                    "no": no_price,
+                    "sum": total,
+                    "url": f"https://polymarket.com/event/{m.get('slug')}"
+                })
+
+        except Exception as e:
+            logger.debug(f"parse error: {e}")
+
+    return opportunities
 
 # =========================
-# BUY FUNCTION（單邊）
+# FORMAT MESSAGE
 # =========================
-def buy(token_id, price, side_name, question):
-    try:
-        size = MAX_USDC / price
+def format_message(opps):
+    msg = "🚀 套利機會\n\n"
 
-        order = OrderArgs(
-            price=price,
-            size=size,
-            side="BUY",
-            token_id=token_id,
+    for o in opps[:5]:
+        msg += (
+            f"{o['question']}\n"
+            f"YES: {o['yes']} | NO: {o['no']}\n"
+            f"SUM: {o['sum']}\n"
+            f"{o['url']}\n\n"
         )
 
-        resp = client.post_order(
-            client.create_order(order),
-            OrderType.IOC
-        )
-
-        logger.info(f"BUY {side_name} @ {price}")
-        tg(f"📈 買入 {side_name}\n{question}\nprice={price}")
-
-    except Exception as e:
-        logger.error(f"trade error: {e}")
-        tg(f"❌ 下單失敗 {e}")
+    return msg
 
 # =========================
-# MAIN
+# MAIN LOOP
 # =========================
 def main():
-    logger.info("🚀 STRATEGY BOT START")
+    logger.info("🚀 Polymarket Arbitrage Bot Started")
 
-    cooldown = {}
+    seen = set()
 
     while True:
         try:
             markets = fetch_markets()
-            print(f"Scanning... {len(markets)} markets")
-            
-            for m in markets:
-                try:
-                    if not m.get("active"):
-                        continue
 
-                    volume = float(m.get("volume", 0))
-                    if volume < MIN_VOLUME:
-                        continue
+            logger.info(f"Scanning... {len(markets)} markets")
 
-                    tokens = m.get("clobTokenIds", [])
-                    if len(tokens) != 2:
-                        continue
+            opps = find_arbitrage(markets)
 
-                    yes_token, no_token = tokens
+            logger.info(f"Found {len(opps)} opportunities")
 
-                    yes_book = get_orderbook(yes_token)
-                    no_book = get_orderbook(no_token)
+            new_opps = []
 
-                    if not yes_book or not no_book:
-                        continue
+            for o in opps:
+                key = o["url"]
+                if key not in seen:
+                    seen.add(key)
+                    new_opps.append(o)
 
-                    if not yes_book.get("asks") or not no_book.get("asks"):
-                        continue
-
-                    yes_price = float(yes_book["asks"][0]["price"])
-                    no_price = float(no_book["asks"][0]["price"])
-
-                    question = m.get("question", "N/A")
-
-                    now = time.time()
-                    if question in cooldown and now - cooldown[question] < 300:
-                        continue
-
-                    # 🟢 買 YES（低估）
-                    if yes_price < YES_BUY_THRESHOLD and no_price > 0.55:
-                        logger.info(f"BUY YES signal {yes_price}")
-                        buy(yes_token, yes_price, "YES", question)
-                        cooldown[question] = now
-
-                    # 🔴 買 NO（低估）
-                    elif no_price < NO_BUY_THRESHOLD and yes_price > 0.55:
-                        logger.info(f"BUY NO signal {no_price}")
-                        buy(no_token, no_price, "NO", question)
-                        cooldown[question] = now
-
-                except Exception as e:
-                    logger.warning(f"market error: {e}")
-                    continue
+            if new_opps:
+                msg = format_message(new_opps)
+                send_telegram(msg)
 
             time.sleep(SCAN_INTERVAL)
 
         except Exception as e:
-            logger.error(f"MAIN ERROR: {e}")
+            logger.error(f"MAIN LOOP ERROR: {e}", exc_info=True)
             time.sleep(5)
 
+# =========================
+# ENTRY
 # =========================
 if __name__ == "__main__":
     main()
