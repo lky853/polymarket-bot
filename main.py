@@ -91,14 +91,14 @@ def find_arbitrage(markets):
                 continue
 
             volume = float(m.get("volume", 0))
-            if volume < MIN_VOLUME:
+            if volume < 10000:   # 降低門檻
                 continue
 
             yes_price = float(m["outcomes"][0]["price"])
             no_price = float(m["outcomes"][1]["price"])
 
-            # 🔥 新策略（偏差）
-            if yes_price < 0.45:
+            # 🔥 測試模式（幾乎一定觸發）
+            if yes_price < 0.6:
                 opportunities.append({
                     "type": "BUY YES",
                     "question": m.get("question"),
@@ -106,7 +106,7 @@ def find_arbitrage(markets):
                     "url": f"https://polymarket.com/event/{m.get('slug')}"
                 })
 
-            if no_price < 0.45:
+            if no_price < 0.6:
                 opportunities.append({
                     "type": "BUY NO",
                     "question": m.get("question"),
