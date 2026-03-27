@@ -119,8 +119,11 @@ def main():
             for m in markets:
                 try:
                     tokens = m.get("clobTokenIds", [])
-                    if len(tokens) != 2:
-                        continue
+
+                    logger.info(f"TOKENS RAW: {tokens}")
+
+                    if not tokens or len(tokens) != 2:
+                    continue
 
                     yes_token, no_token = tokens
 
