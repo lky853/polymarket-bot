@@ -125,7 +125,8 @@ def main():
     while True:
         try:
             markets = fetch_markets()
-
+            print(f"Scanning... {len(markets)} markets")
+            
             for m in markets:
                 try:
                     if not m.get("active"):
