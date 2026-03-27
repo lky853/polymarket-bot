@@ -7,8 +7,8 @@ import logging
 # CONFIG
 # =========================
 SCAN_INTERVAL = 10
-MIN_VOLUME = 20000
-ARBITRAGE_THRESHOLD = 0.99  # YES + NO < 1 才算套利
+MIN_VOLUME = 10000
+PRICE_THRESHOLD = 0.6  # 測試用（一定會出訊號）
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -23,7 +23,7 @@ logging.basicConfig(
 logger = logging.getLogger()
 
 # =========================
-# TELEGRAM（帶 retry）
+# TELEGRAM（含 retry）
 # =========================
 def send_telegram(message, retries=5):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
@@ -53,80 +53,52 @@ def send_telegram(message, retries=5):
     logger.error("Telegram failed after retries")
 
 # =========================
-# FETCH MARKETS（分頁版🔥）
+# FETCH TICKERS（🔥正確資料源）
 # =========================
-def fetch_markets():
-    try:
-        url = "https://gamma-api.polymarket.com/markets"
-        params = {
-            "limit": 100
-        }
+def fetch_tickers():
+    url = "https://gamma-api.polymarket.com/tickers"
 
-        res = requests.get(url, params=params, timeout=20)
+    for i in range(3):
+        try:
+            res = requests.get(url, timeout=20)
 
-        if res.status_code != 200:
-            logger.error(f"bad response: {res.status_code}")
-            return []
-
-        data = res.json()
-
-        if isinstance(data, list):
-            return data
-
-        return data.get("markets", [])
-
-    except Exception as e:
-        logger.error(f"fetch error: {e}")
-        return []
-
-# =========================
-# FIND ARBITRAGE
-# =========================
-def get_price(outcome):
-    # 優先順序
-    for key in ["price", "bestAsk", "bestBid", "lastTradePrice"]:
-        if outcome.get(key) is not None:
-            try:
-                return float(outcome[key])
-            except:
+            if res.status_code != 200:
+                logger.error(f"bad response: {res.status_code}")
                 continue
-    return None
 
+            data = res.json()
 
-def find_arbitrage(markets):
+            if isinstance(data, list):
+                return data
+
+        except Exception as e:
+            logger.error(f"fetch error: {e}")
+
+        time.sleep(2)
+
+    return []
+
+# =========================
+# STRATEGY（測試版）
+# =========================
+def find_opportunities(tickers):
     opportunities = []
 
-    for m in markets:
+    for t in tickers:
         try:
-            outcomes = m.get("outcomes")
-            if not outcomes or len(outcomes) != 2:
+            price = float(t.get("price", 0))
+            volume = float(t.get("volume", 0))
+
+            if volume < MIN_VOLUME:
                 continue
 
-            volume = float(m.get("volume", 0))
-            if volume < 5000:
-                continue
-
-            yes_price = get_price(outcomes[0])
-            no_price = get_price(outcomes[1])
-
-            if yes_price is None or no_price is None:
-                continue
-
-            # 🔥 測試模式（一定會出）
-            if yes_price < 0.6:
+            # 🔥 測試策略（一定會有）
+            if price < PRICE_THRESHOLD:
                 opportunities.append({
-                    "type": "BUY YES",
-                    "question": m.get("question"),
-                    "price": yes_price,
-                    "url": f"https://polymarket.com/event/{m.get('slug')}"
-                })
-
-            if no_price < 0.6:
-                opportunities.append({
-                    "type": "BUY NO",
-                    "question": m.get("question"),
-                    "price": no_price,
-                    "url": f"https://polymarket.com/event/{m.get('slug')}"
+                    "question": t.get("question"),
+                    "price": price,
+                    "volume": volume,
+                    "url": f"https://polymarket.com/event/{t.get('market_slug')}"
                 })
 
         except Exception as e:
@@ -138,13 +110,13 @@ def find_arbitrage(markets):
 # FORMAT MESSAGE
 # =========================
 def format_message(opps):
-    msg = "🚀 套利機會\n\n"
+    msg = "📈 發現機會\n\n"
 
     for o in opps[:5]:
         msg += (
             f"{o['question']}\n"
-            f"YES: {o['yes']} | NO: {o['no']}\n"
-            f"SUM: {o['sum']}\n"
+            f"price: {o['price']}\n"
+            f"vol: {o['volume']}\n"
             f"{o['url']}\n\n"
         )
 
@@ -154,17 +126,17 @@ def format_message(opps):
 # MAIN LOOP
 # =========================
 def main():
-    logger.info("🚀 Polymarket Arbitrage Bot Started")
+    logger.info("🚀 Polymarket Strategy Bot Started")
 
     seen = set()
 
     while True:
         try:
-            markets = fetch_markets()
+            tickers = fetch_tickers()
 
-            logger.info(f"Scanning... {len(markets)} markets")
+            logger.info(f"Scanning... {len(tickers)} tickers")
 
-            opps = find_arbitrage(markets)
+            opps = find_opportunities(tickers)
 
             logger.info(f"Found {len(opps)} opportunities")
 
