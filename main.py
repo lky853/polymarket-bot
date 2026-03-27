@@ -97,19 +97,25 @@ def find_arbitrage(markets):
             yes_price = float(m["outcomes"][0]["price"])
             no_price = float(m["outcomes"][1]["price"])
 
-            total = yes_price + no_price
-
-            if total < ARBITRAGE_THRESHOLD:
+            # 🔥 新策略（偏差）
+            if yes_price < 0.45:
                 opportunities.append({
+                    "type": "BUY YES",
                     "question": m.get("question"),
-                    "yes": yes_price,
-                    "no": no_price,
-                    "sum": total,
+                    "price": yes_price,
+                    "url": f"https://polymarket.com/event/{m.get('slug')}"
+                })
+
+            if no_price < 0.45:
+                opportunities.append({
+                    "type": "BUY NO",
+                    "question": m.get("question"),
+                    "price": no_price,
                     "url": f"https://polymarket.com/event/{m.get('slug')}"
                 })
 
         except Exception as e:
-            logger.debug(f"parse error: {e}")
+            logger.debug(e)
 
     return opportunities
 
