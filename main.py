@@ -56,32 +56,24 @@ def send_telegram(message, retries=5):
 # FETCH MARKETS（分頁版🔥）
 # =========================
 def fetch_markets():
-    all_markets = []
-    offset = 0
-    limit = 100
-
     try:
-        while True:
-            url = "https://gamma-api.polymarket.com/markets"
-            params = {
-                "limit": limit,
-                "offset": offset
-            }
+        url = "https://gamma-api.polymarket.com/markets"
+        params = {
+            "limit": 100
+        }
 
-            res = requests.get(url, params=params, timeout=10)
-            data = res.json()
+        res = requests.get(url, params=params, timeout=20)
 
-            if not isinstance(data, list):
-                break
+        if res.status_code != 200:
+            logger.error(f"bad response: {res.status_code}")
+            return []
 
-            all_markets.extend(data)
+        data = res.json()
 
-            if len(data) < limit:
-                break
+        if isinstance(data, list):
+            return data
 
-            offset += limit
-
-        return all_markets
+        return data.get("markets", [])
 
     except Exception as e:
         logger.error(f"fetch error: {e}")
